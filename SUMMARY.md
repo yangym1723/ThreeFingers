@@ -22,7 +22,7 @@
 #### 状态机架构
 使用GPU并行计算的5状态抓取流程：
 
-```
+```text
 REST (0.2s)
     ↓
 APPROACH_ABOVE_OBJECT (1.0s) - 移动到物体上方
@@ -174,7 +174,7 @@ ee_pos = base_link_pos + frame_offset
 
 # 状态机中的物体上方位置
 above_object_pos = object_pos + offset
-# 其中 offset = [Y:0.1, Z:0.08, 0] 米
+# 其中 offset = [0.0, 0.1, 0.08] 米 (X, Y, Z)
 ```
 
 ### 5. GPU并行计算机制
@@ -186,11 +186,14 @@ above_object_pos = object_pos + offset
 
 #### 数据格式转换
 ```python
-# PyTorch (Isaac Lab) 四元数格式: (w, x, y, z)
-# Warp 四元数格式: (x, y, z, w)
+# PyTorch (Isaac Lab) 四元数格式: [x, y, z, w, qx, qy, qz]
+# Warp 四元数格式: [x, y, z, qx, qy, qz, qw]
 
-# 转换方法：
+# 转换方法（重排索引）：
+# Isaac Lab -> Warp: [0,1,2, 4,5,6,3] 即 [x,y,z, w,qx,qy,qz] -> [x,y,z, qx,qy,qz,w]
 pose_warp = pose_isaac[:, [0, 1, 2, 4, 5, 6, 3]]  # 输入时
+
+# Warp -> Isaac Lab: [0,1,2, 6,3,4,5] 即 [x,y,z, qx,qy,qz,w] -> [x,y,z, w,qx,qy,qz]
 pose_isaac = pose_warp[:, [0, 1, 2, 6, 3, 4, 5]]  # 输出时
 ```
 

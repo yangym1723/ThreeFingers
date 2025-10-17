@@ -76,15 +76,16 @@ class PickSmWaitTime:
     """Additional wait times (in s) for states for before switching."""
 
     REST = wp.constant(0.2)
-    APPROACH_ABOVE_OBJECT = wp.constant(1.0)
-    APPROACH_OBJECT = wp.constant(1.0)
-    GRASP_OBJECT = wp.constant(1.0)
+    APPROACH_ABOVE_OBJECT = wp.constant(0.5)
+    APPROACH_OBJECT = wp.constant(0.6)
+    GRASP_OBJECT = wp.constant(0.8)
     LIFT_OBJECT = wp.constant(1.0)
 
 
 @wp.func
 def distance_below_threshold(current_pos: wp.vec3, desired_pos: wp.vec3, threshold: float) -> bool:
     print(current_pos)
+    print("-----------")
     print(desired_pos)
     return wp.length(current_pos - desired_pos) < threshold
 
@@ -110,7 +111,6 @@ def infer_state_machine(
     if state == PickSmState.REST:
         des_ee_pose[tid] = ee_pose[tid]
         gripper_state[tid] = GripperState.OPEN
-        print("PickSmState:REST")
         # wait for a while
         if sm_wait_time[tid] >= PickSmWaitTime.REST:
             # move to next state and reset wait time
@@ -119,7 +119,6 @@ def infer_state_machine(
     elif state == PickSmState.APPROACH_ABOVE_OBJECT:
         des_ee_pose[tid] = wp.transform_multiply(offset[tid], object_pose[tid])
         gripper_state[tid] = GripperState.OPEN
-        print("PickSmState:APPROACH_ABOVE_OBJECT")
         if distance_below_threshold(
             wp.transform_get_translation(ee_pose[tid]),
             wp.transform_get_translation(des_ee_pose[tid]),
@@ -209,8 +208,7 @@ class PickAndLiftSm:
 
         # approach above object offset
         self.offset = torch.zeros((self.num_envs, 7), device=self.device)
-        self.offset[:, 2] = 0.08
-        self.offset[:, 1] = 0.1
+        self.offset[:, 2] = 0.09
         self.offset[:, -1] = 1.0  # warp expects quaternion as (x, y, z, w)
 
         # convert to warp
@@ -283,8 +281,10 @@ def main():
     actions[:, 3] = 1.0
     # desired object orientation (we only do position control of object)
     desired_orientation = torch.zeros((env.unwrapped.num_envs, 4), device=env.unwrapped.device)
-    desired_orientation[:, 0] = 0.707
-    desired_orientation[:, 1] = -0.707
+    desired_orientation[:, 0] = 0.5
+    desired_orientation[:, 1] = -0.5
+    desired_orientation[:, 2] = -0.5
+    desired_orientation[:, 3] = 0.5
 
     # create state machine
     pick_sm = PickAndLiftSm(

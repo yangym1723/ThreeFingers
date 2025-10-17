@@ -49,7 +49,7 @@ class UR5CubeLiftEnvCfg(LiftEnvCfg):
             init_state=RigidObjectCfg.InitialStateCfg(pos=(0.7, 0.0, 0.25), rot=[1, 0, 0, 0]),
             spawn=UsdFileCfg(
                 usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/DexCube/dex_cube_instanceable.usd",
-                scale=(0.5, 0.5, 0.5),
+                scale=(0.7, 0.7, 0.9),
                 rigid_props=RigidBodyPropertiesCfg(
                     solver_position_iteration_count=16,
                     solver_velocity_iteration_count=1,
@@ -74,7 +74,7 @@ class UR5CubeLiftEnvCfg(LiftEnvCfg):
                     prim_path="{ENV_REGEX_NS}/Robot/ur5/body_hand/body_hand",
                     name="end_effector",
                     offset=OffsetCfg(
-                        pos=[0.0, 0.08, 0.1],
+                        pos=[0.0, 0.08, 0.0],
                     ),
                 ),
             ],

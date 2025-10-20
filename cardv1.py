@@ -113,7 +113,7 @@ def infer_state_machine(
         # wait for a while
         if sm_wait_time[tid] >= PickSmWaitTime.REST:
             # move to next state and reset wait time
-            sm_state[tid] = PickSmState.REST
+            sm_state[tid] = PickSmState.APPROACH_ABOVE_OBJECT
             sm_wait_time[tid] = 0.0
     elif state == PickSmState.APPROACH_ABOVE_OBJECT:
         des_ee_pose[tid] = wp.transform_multiply(offset[tid], object_pose[tid])
@@ -124,7 +124,7 @@ def infer_state_machine(
             position_threshold,
         ):
             # wait for a while
-            if sm_wait_time[tid] >= PickSmWaitTime.APPROACH_OBJECT:
+            if sm_wait_time[tid] >= PickSmWaitTime.APPROACH_ABOVE_OBJECT:
                 # move to next state and reset wait time
                 sm_state[tid] = PickSmState.APPROACH_OBJECT
                 sm_wait_time[tid] = 0.0
@@ -277,7 +277,10 @@ def main():
     actions[:, 3] = 1.0
     # desired object orientation (we only do position control of object)
     desired_orientation = torch.zeros((env.unwrapped.num_envs, 4), device=env.unwrapped.device)
-    desired_orientation[:, 1] = 1.0
+    desired_orientation[:, 0] = 0.5
+    desired_orientation[:, 1] = -0.5
+    desired_orientation[:, 2] = -0.5
+    desired_orientation[:, 3] = 0.5
     # create state machine
     pick_sm = PickAndLiftSm(
         env_cfg.sim.dt * env_cfg.decimation, env.unwrapped.num_envs, env.unwrapped.device, position_threshold=0.01

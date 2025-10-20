@@ -48,7 +48,7 @@ from isaaclab.assets.rigid_object.rigid_object_data import RigidObjectData
 
 import isaaclab_tasks  # noqa: F401
 
-import env
+import env1
 
 from isaaclab_tasks.manager_based.manipulation.lift.lift_env_cfg import LiftEnvCfg
 from isaaclab_tasks.utils.parse_cfg import parse_env_cfg

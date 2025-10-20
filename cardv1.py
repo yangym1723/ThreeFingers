@@ -50,7 +50,7 @@ import isaaclab_tasks  # noqa: F401
 
 import env1
 
-from isaaclab_tasks.manager_based.manipulation.lift.lift_env_cfg import LiftEnvCfg
+from env1.lift_env_cfg import LiftEnvCfg
 from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
 # initialize warp
@@ -126,7 +126,7 @@ def infer_state_machine(
             # wait for a while
             if sm_wait_time[tid] >= PickSmWaitTime.APPROACH_ABOVE_OBJECT:
                 # move to next state and reset wait time
-                sm_state[tid] = PickSmState.APPROACH_OBJECT
+                sm_state[tid] = PickSmState.APPROACH_ABOVE_OBJECT
                 sm_wait_time[tid] = 0.0
     elif state == PickSmState.APPROACH_OBJECT:
         des_ee_pose[tid] = object_pose[tid]

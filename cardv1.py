@@ -70,8 +70,9 @@ class PickSmState:
     APPROACH_ABOVE_OBJECT = wp.constant(1)
     ROTATE = wp.constant(2)
     APPROACH_OBJECT = wp.constant(3)
-    GRASP_OBJECT = wp.constant(4)
-    LIFT_OBJECT = wp.constant(5)
+    PUSH = wp.constant(4)
+    GRASP_OBJECT = wp.constant(5)
+    LIFT_OBJECT = wp.constant(6)
 
 
 class PickSmWaitTime:
@@ -81,6 +82,7 @@ class PickSmWaitTime:
     APPROACH_ABOVE_OBJECT = wp.constant(0.5)
     ROTATE = wp.constant(1.0)
     APPROACH_OBJECT = wp.constant(0.6)
+    PUSH = wp.constant(1.0)
     GRASP_OBJECT = wp.constant(0.3)
     LIFT_OBJECT = wp.constant(1.0)
 
@@ -146,7 +148,6 @@ def infer_state_machine(
         q_rot = wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), -0.78539816339)  # pi/4
         q_new = quat_mul(base_q, q_rot)
         des_ee_pose[tid] = wp.transform(base_t, q_new)
-        
         gripper_state[tid] = GripperState.OPEN
         if distance_below_threshold(
             wp.transform_get_translation(ee_pose[tid]),
@@ -156,10 +157,16 @@ def infer_state_machine(
             # wait for a while
             if sm_wait_time[tid] >= PickSmWaitTime.ROTATE:
                 # move to next state and reset wait time
-                sm_state[tid] = PickSmState.ROTATE
+                sm_state[tid] = PickSmState.APPROACH_OBJECT
                 sm_wait_time[tid] = 0.0
     elif state == PickSmState.APPROACH_OBJECT:
-        des_ee_pose[tid] = object_pose[tid]
+        
+        base_pose = wp.transform_multiply(object_pose[tid], offset[tid])  
+        base_t = wp.transform_get_translation(base_pose)
+        ee_q = wp.transform_get_rotation(ee_pose[tid])  
+        drop = 0.09  
+        des_ee_pose[tid] = wp.transform(base_t + wp.vec3(0.0, 0.0, -drop), ee_q)
+
         gripper_state[tid] = GripperState.OPEN
         if distance_below_threshold(
             wp.transform_get_translation(ee_pose[tid]),
@@ -167,7 +174,6 @@ def infer_state_machine(
             position_threshold,
         ):
             if sm_wait_time[tid] >= PickSmWaitTime.APPROACH_OBJECT:
-                # move to next state and reset wait time
                 sm_state[tid] = PickSmState.GRASP_OBJECT
                 sm_wait_time[tid] = 0.0
     elif state == PickSmState.GRASP_OBJECT:
@@ -234,7 +240,7 @@ class PickAndLiftSm:
 
         # approach above object offset
         self.offset = torch.zeros((self.num_envs, 7), device=self.device)
-        self.offset[:, 2] = 0.03
+        self.offset[:, 2] = 0.04
         self.offset[:, 1] = -0.1
         self.offset[:, -1] = 1.0  # warp expects quaternion as (x, y, z, w)
 

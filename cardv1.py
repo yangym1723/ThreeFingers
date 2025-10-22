@@ -41,7 +41,6 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 import torch
 from collections.abc import Sequence
-from scipy.spatial.transform import Rotation as R
 
 import warp as wp
 
@@ -56,7 +55,6 @@ from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
 # initialize warp
 wp.init()
-
 
 class GripperState:
     """States for the gripper."""
@@ -90,7 +88,17 @@ class PickSmWaitTime:
 @wp.func
 def distance_below_threshold(current_pos: wp.vec3, desired_pos: wp.vec3, threshold: float) -> bool:
     return wp.length(current_pos - desired_pos) < threshold
-
+@wp.func
+def quat_mul(a: wp.quat, b: wp.quat) -> wp.quat:
+    # a,b are (x,y,z,w)
+    ax, ay, az, aw = a[0], a[1], a[2], a[3]
+    bx, by, bz, bw = b[0], b[1], b[2], b[3]
+    return wp.quat(
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+        aw * bw - ax * bx - ay * by - az * bz,
+    )
 
 @wp.kernel
 def infer_state_machine(
@@ -119,7 +127,7 @@ def infer_state_machine(
             sm_state[tid] = PickSmState.APPROACH_ABOVE_OBJECT
             sm_wait_time[tid] = 0.0
     elif state == PickSmState.APPROACH_ABOVE_OBJECT:
-        des_ee_pose[tid] = wp.transform_multiply(offset[tid], object_pose[tid])
+        des_ee_pose[tid] = wp.transform_multiply(object_pose[tid], offset[tid])
         gripper_state[tid] = GripperState.OPEN
         if distance_below_threshold(
             wp.transform_get_translation(ee_pose[tid]),
@@ -132,7 +140,24 @@ def infer_state_machine(
                 sm_state[tid] = PickSmState.ROTATE
                 sm_wait_time[tid] = 0.0
     elif state == PickSmState.ROTATE:
-        pass
+        base_pose = wp.transform_multiply(object_pose[tid], offset[tid])
+        base_t = wp.transform_get_translation(base_pose)
+        base_q = wp.transform_get_rotation(base_pose)
+        q_rot = wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), -0.78539816339)  # pi/4
+        q_new = quat_mul(base_q, q_rot)
+        des_ee_pose[tid] = wp.transform(base_t, q_new)
+        
+        gripper_state[tid] = GripperState.OPEN
+        if distance_below_threshold(
+            wp.transform_get_translation(ee_pose[tid]),
+            wp.transform_get_translation(des_ee_pose[tid]),
+            position_threshold,
+        ):
+            # wait for a while
+            if sm_wait_time[tid] >= PickSmWaitTime.ROTATE:
+                # move to next state and reset wait time
+                sm_state[tid] = PickSmState.ROTATE
+                sm_wait_time[tid] = 0.0
     elif state == PickSmState.APPROACH_OBJECT:
         des_ee_pose[tid] = object_pose[tid]
         gripper_state[tid] = GripperState.OPEN
@@ -209,7 +234,8 @@ class PickAndLiftSm:
 
         # approach above object offset
         self.offset = torch.zeros((self.num_envs, 7), device=self.device)
-        self.offset[:, 2] = 0.1
+        self.offset[:, 2] = 0.03
+        self.offset[:, 1] = -0.1
         self.offset[:, -1] = 1.0  # warp expects quaternion as (x, y, z, w)
 
         # convert to warp

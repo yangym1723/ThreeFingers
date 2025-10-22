@@ -97,7 +97,7 @@ class UR5CubeLiftEnvCfg(LiftEnvCfg):
                     prim_path="{ENV_REGEX_NS}/Robot/ur5_physics/body_link",
                     name="end_effector",
                     offset=OffsetCfg(
-                        pos=[0.0, 0.12, 0.0],
+                        pos=[0.0, 0.12, 0.02],
                     ),
                 ),
             ],

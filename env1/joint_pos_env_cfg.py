@@ -53,10 +53,26 @@ class UR5CubeLiftEnvCfg(LiftEnvCfg):
         # Set Cube as object
         self.scene.object = RigidObjectCfg(
             prim_path="{ENV_REGEX_NS}/Object",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0.055], rot=[1, 0, 0, 0]),
+            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.4, 0, 0.06], rot=[0.5, -0.5, -0.5, 0.5]),
             spawn=UsdFileCfg(
                 usd_path=f"/home/yang/Repo_USD/card.usd",
-                scale=(0.1, 0.05, 0.002),
+                scale=(0.1, 0.002, 0.05),
+                rigid_props=RigidBodyPropertiesCfg(
+                    solver_position_iteration_count=16,
+                    solver_velocity_iteration_count=1,
+                    max_angular_velocity=1000.0,
+                    max_linear_velocity=1000.0,
+                    max_depenetration_velocity=5.0,
+                    disable_gravity=False,
+                ),
+            ),
+        )
+        self.scene.desk = RigidObjectCfg(
+            prim_path="{ENV_REGEX_NS}/DeskUp",
+            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.4, 0, 0.03], rot=[1, 0.0, 0.0, 0.0]),
+            spawn=UsdFileCfg(
+                usd_path=f"/home/yang/Repo_USD/card.usd",
+                scale=(0.4, 0.4, 0.02),
                 rigid_props=RigidBodyPropertiesCfg(
                     solver_position_iteration_count=16,
                     solver_velocity_iteration_count=1,
@@ -71,7 +87,7 @@ class UR5CubeLiftEnvCfg(LiftEnvCfg):
         # Listens to the required transforms
         marker_cfg = FRAME_MARKER_CFG.copy()
         marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
-        marker_cfg.prim_path = "/Visuals/FrameTransformer"
+        marker_cfg.prim_path = "/Visuals/eeFrame"
         self.scene.ee_frame = FrameTransformerCfg(
             prim_path="{ENV_REGEX_NS}/Robot/ur5_physics/base_link",
             debug_vis=True,
@@ -83,6 +99,22 @@ class UR5CubeLiftEnvCfg(LiftEnvCfg):
                     offset=OffsetCfg(
                         pos=[0.0, 0.12, 0.0],
                     ),
+                ),
+            ],
+        )
+        # 可视化物块坐标系
+        card_marker_cfg = FRAME_MARKER_CFG.copy()
+        card_marker_cfg.markers["frame"].scale = (0.05, 0.05, 0.05)
+        card_marker_cfg.prim_path = "/Visuals/CardFrame"
+        self.scene.card_frame = FrameTransformerCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/ur5_physics/base_link",  
+            debug_vis=True,
+            visualizer_cfg=card_marker_cfg,
+            target_frames=[
+                FrameTransformerCfg.FrameCfg(
+                    prim_path="{ENV_REGEX_NS}/Object/card", 
+                    name="card_frame",
+                    offset=OffsetCfg(pos=[0.0, 0.0, 0.0]),  
                 ),
             ],
         )

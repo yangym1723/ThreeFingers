@@ -41,6 +41,7 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 import torch
 from collections.abc import Sequence
+from scipy.spatial.transform import Rotation as R
 
 import warp as wp
 
@@ -69,9 +70,10 @@ class PickSmState:
 
     REST = wp.constant(0)
     APPROACH_ABOVE_OBJECT = wp.constant(1)
-    APPROACH_OBJECT = wp.constant(2)
-    GRASP_OBJECT = wp.constant(3)
-    LIFT_OBJECT = wp.constant(4)
+    ROTATE = wp.constant(2)
+    APPROACH_OBJECT = wp.constant(3)
+    GRASP_OBJECT = wp.constant(4)
+    LIFT_OBJECT = wp.constant(5)
 
 
 class PickSmWaitTime:
@@ -79,6 +81,7 @@ class PickSmWaitTime:
 
     REST = wp.constant(0.2)
     APPROACH_ABOVE_OBJECT = wp.constant(0.5)
+    ROTATE = wp.constant(1.0)
     APPROACH_OBJECT = wp.constant(0.6)
     GRASP_OBJECT = wp.constant(0.3)
     LIFT_OBJECT = wp.constant(1.0)
@@ -126,8 +129,10 @@ def infer_state_machine(
             # wait for a while
             if sm_wait_time[tid] >= PickSmWaitTime.APPROACH_ABOVE_OBJECT:
                 # move to next state and reset wait time
-                sm_state[tid] = PickSmState.APPROACH_ABOVE_OBJECT
+                sm_state[tid] = PickSmState.ROTATE
                 sm_wait_time[tid] = 0.0
+    elif state == PickSmState.ROTATE:
+        pass
     elif state == PickSmState.APPROACH_OBJECT:
         des_ee_pose[tid] = object_pose[tid]
         gripper_state[tid] = GripperState.OPEN
@@ -300,13 +305,14 @@ def main():
             # -- object frame
             object_data: RigidObjectData = env.unwrapped.scene["object"].data
             object_position = object_data.root_pos_w - env.unwrapped.scene.env_origins
+            object_orientation = object_data.root_quat_w
             # -- target object frame
             desired_position = env.unwrapped.command_manager.get_command("object_pose")[..., :3]
 
             # advance state machine
             actions = pick_sm.compute(
                 torch.cat([tcp_rest_position, tcp_rest_orientation], dim=-1),
-                torch.cat([object_position, desired_orientation], dim=-1),
+                torch.cat([object_position, object_orientation], dim=-1),
                 torch.cat([desired_position, desired_orientation], dim=-1),
             )
 

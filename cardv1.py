@@ -82,11 +82,57 @@ class PickSmWaitTime:
     APPROACH_ABOVE_OBJECT = wp.constant(0.5)
     ROTATE = wp.constant(1.0)
     APPROACH_OBJECT = wp.constant(0.6)
-    PUSH = wp.constant(1.0)
+    PUSH = wp.constant(1.5)
     GRASP_OBJECT = wp.constant(0.3)
     LIFT_OBJECT = wp.constant(1.0)
 
+class RectanglePosition:
+    r0 = wp.vec3(0.22, 0.18, 0.02)
+    r1 = wp.vec3(0.58, 0.18, 0.02)
+    r2 = wp.vec3(0.58, -0.18, 0.02)
+    r3 = wp.vec3(0.22, -0.18, 0.02)
+@wp.func
+def find_point(point: wp.vec3,l_vec: wp.vec3) -> wp.vec2:
 
+    x_min=RectanglePosition.r0[0]
+    x_max=RectanglePosition.r1[0]
+    y_min=RectanglePosition.r2[1]
+    y_max=RectanglePosition.r1[1]
+    x0=point[0]
+    y0=point[1]
+    vx=l_vec[0]
+    vy=l_vec[1]
+
+    eps = 1.0e-9
+    big = 1.0e30
+    t_x = big
+    if vx > eps:
+        t_x = (x_max - x0) / vx
+    elif vx < -eps:
+        t_x = (x_min - x0) / vx
+
+    t_y = big
+    if vy > eps:
+        t_y = (y_max - y0) / vy
+    elif vy < -eps:
+        t_y = (y_min - y0) / vy
+    t = t_x
+    if (t_y < t):
+        t = t_y
+    if t < 0.0:
+        t = 0.0
+    ix = x0 + vx * t
+    iy = y0 + vy * t
+    if ix < x_min:
+        ix = x_min
+    if ix > x_max:
+        ix = x_max
+    if iy < y_min:
+        iy = y_min
+    if iy > y_max:
+        iy = y_max
+    
+    return wp.vec2(ix, iy)
 @wp.func
 def distance_below_threshold(current_pos: wp.vec3, desired_pos: wp.vec3, threshold: float) -> bool:
     return wp.length(current_pos - desired_pos) < threshold
@@ -101,6 +147,15 @@ def quat_mul(a: wp.quat, b: wp.quat) -> wp.quat:
         aw * bz + ax * by - ay * bx + az * bw,
         aw * bw - ax * bx - ay * by - az * bz,
     )
+@wp.func
+def compute_push_orientation(obj: wp.transform, off: wp.transform) -> wp.quat:
+
+    base_pose = wp.transform_multiply(obj, off)
+    base_q = wp.transform_get_rotation(base_pose)
+    q_rot = wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), -0.78539816339)  # -45°
+    return quat_mul(base_q, q_rot)
+
+
 
 @wp.kernel
 def infer_state_machine(
@@ -160,13 +215,13 @@ def infer_state_machine(
                 sm_state[tid] = PickSmState.APPROACH_OBJECT
                 sm_wait_time[tid] = 0.0
     elif state == PickSmState.APPROACH_OBJECT:
-        
+        q_target = compute_push_orientation(object_pose[tid], offset[tid])
         base_pose = wp.transform_multiply(object_pose[tid], offset[tid])  
         base_t = wp.transform_get_translation(base_pose)
         ee_q = wp.transform_get_rotation(ee_pose[tid])  
-        drop = 0.09  
-        des_ee_pose[tid] = wp.transform(base_t + wp.vec3(0.0, 0.0, -drop), ee_q)
-
+        drop = 0.094  
+        des_ee_pose[tid] = wp.transform(base_t + wp.vec3(0.0, 0.0, -drop), q_target)
+        
         gripper_state[tid] = GripperState.OPEN
         if distance_below_threshold(
             wp.transform_get_translation(ee_pose[tid]),
@@ -174,15 +229,54 @@ def infer_state_machine(
             position_threshold,
         ):
             if sm_wait_time[tid] >= PickSmWaitTime.APPROACH_OBJECT:
+                sm_state[tid] = PickSmState.PUSH
+                sm_wait_time[tid] = 0.0
+    elif state == PickSmState.PUSH:
+        q_target = compute_push_orientation(object_pose[tid], offset[tid])
+
+        dir_w = wp.transform_vector(object_pose[tid], wp.vec3(0.0, 0.0, -1.0))
+
+        card_pos = wp.transform_get_translation(object_pose[tid])
+        hit_xy = find_point(card_pos, dir_w)
+
+        ee_t = wp.transform_get_translation(ee_pose[tid])
+
+        base_pose = wp.transform_multiply(object_pose[tid], offset[tid])
+        base_t = wp.transform_get_translation(base_pose)
+        drop = 0.094
+        push_down_bias = 0.002  
+        push_plane_z = base_t[2] - drop - push_down_bias
+
+        goal_t = wp.vec3(hit_xy[0], hit_xy[1], push_plane_z)
+
+        push_speed = 0.7  
+        max_step = push_speed * dt[tid]
+
+        to_goal = wp.vec3(goal_t[0] - ee_t[0], goal_t[1] - ee_t[1], 0.0)
+        dist = wp.length(to_goal)
+
+        des_t = goal_t
+        eps = 1.0e-9
+        if dist > max_step + eps:
+            s = max_step / dist
+            des_t = wp.vec3(ee_t[0] + to_goal[0] * s,
+                            ee_t[1] + to_goal[1] * s,
+                            push_plane_z)  
+
+        des_ee_pose[tid] = wp.transform(des_t, q_target)
+        gripper_state[tid] = GripperState.OPEN
+
+        if distance_below_threshold(ee_t, goal_t, position_threshold):
+            if sm_wait_time[tid] >= PickSmWaitTime.PUSH:
                 sm_state[tid] = PickSmState.GRASP_OBJECT
                 sm_wait_time[tid] = 0.0
     elif state == PickSmState.GRASP_OBJECT:
-        des_ee_pose[tid] = object_pose[tid]
-        gripper_state[tid] = GripperState.CLOSE
+        des_ee_pose[tid] = ee_pose[tid]
+        gripper_state[tid] = GripperState.OPEN
         # wait for a while
         if sm_wait_time[tid] >= PickSmWaitTime.GRASP_OBJECT:
             # move to next state and reset wait time
-            sm_state[tid] = PickSmState.LIFT_OBJECT
+            sm_state[tid] = PickSmState.GRASP_OBJECT
             sm_wait_time[tid] = 0.0
     elif state == PickSmState.LIFT_OBJECT:
         des_ee_pose[tid] = des_object_pose[tid]
@@ -338,6 +432,10 @@ def main():
             object_data: RigidObjectData = env.unwrapped.scene["object"].data
             object_position = object_data.root_pos_w - env.unwrapped.scene.env_origins
             object_orientation = object_data.root_quat_w
+
+            # desk_data: RigidObjectData = env.unwrapped.scene["desk"].data
+            # desk_position = desk_data.root_pos_w - env.unwrapped.scene.env_origins
+            # print(desk_position)
             # -- target object frame
             desired_position = env.unwrapped.command_manager.get_command("object_pose")[..., :3]
 
